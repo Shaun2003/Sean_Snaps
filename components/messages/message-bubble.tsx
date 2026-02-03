@@ -8,7 +8,7 @@ import Link from "next/link"
 import { MessageContextMenu } from "./message-context-menu"
 import { MessageReactions } from "./message-reactions"
 import { VoiceNotePlayer } from "./voice-note-player"
-import { FileText, ImageIcon, Film, Paperclip } from "lucide-react"
+import { FileText, ImageIcon, Film, Paperclip, AlertCircle } from "lucide-react"
 
 interface MessageBubbleProps {
   message: Message & {
@@ -63,9 +63,17 @@ export function MessageBubble({
         )
       case "audio/webm":
       case "audio":
+        if (!msg.file_url) {
+          return (
+            <div className="flex items-center gap-2 text-xs px-4 py-2 rounded-lg bg-red-500/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+              <AlertCircle className="h-4 w-4" />
+              <span>Voice note unavailable</span>
+            </div>
+          )
+        }
         return (
           <VoiceNotePlayer 
-            audioUrl={msg.file_url || ""} 
+            audioUrl={msg.file_url} 
             className="min-w-62.5"
           />
         )

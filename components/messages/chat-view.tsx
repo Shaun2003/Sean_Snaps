@@ -270,16 +270,29 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
       const response = await fetch(audioUrl)
       const blob = await response.blob()
       
+      console.log("[ChatView] Voice note blob size:", blob.size, "Type:", blob.type)
+      
       // Upload to Supabase storage
       const fileName = `${userId}/${conversationId}/${Date.now()}.webm`
-      const { error: uploadError } = await supabase.storage.from("voice_notes").upload(fileName, blob)
+      const { data: uploadData, error: uploadError } = await supabase.storage.from("voice_notes").upload(fileName, blob)
 
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        console.error("[ChatView] Upload error:", uploadError)
+        throw uploadError
+      }
+
+      console.log("[ChatView] Upload successful:", uploadData)
 
       // Get public URL
       const { data } = supabase.storage.from("voice_notes").getPublicUrl(fileName)
       
-      if (!data?.publicUrl) throw new Error("Failed to get public URL")
+      console.log("[ChatView] Public URL data:", data)
+      
+      if (!data?.publicUrl) {
+        throw new Error("Failed to get public URL")
+      }
+
+      console.log("[ChatView] Saving message with URL:", data.publicUrl)
 
       // Save message with file URL
       await supabase.from("messages").insert({

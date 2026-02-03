@@ -21,6 +21,22 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Validate URL on mount
+  useEffect(() => {
+    if (!audioUrl) {
+      setError("No audio URL provided")
+      return
+    }
+
+    // Check if it's a valid URL
+    try {
+      new URL(audioUrl)
+    } catch {
+      setError("Invalid audio URL")
+      console.error("[VoiceNotePlayer] Invalid URL:", audioUrl)
+    }
+  }, [audioUrl])
+
   const handlePlayPause = async () => {
     if (!audioRef.current) {
       // Create audio element
@@ -49,13 +65,39 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
       audio.addEventListener("pause", () => setIsPlaying(false))
 
       audio.addEventListener("error", (e) => {
-        console.error("[VoiceNotePlayer] Audio error:", e)
-        setError("Failed to load audio")
+        const audio = e.target as HTMLAudioElement
+        let errorMessage = "Failed to load audio"
+        
+        if (audio.error) {
+          switch (audio.error.code) {
+            case audio.error.MEDIA_ERR_ABORTED:
+              errorMessage = "Audio loading was aborted"
+              break
+            case audio.error.MEDIA_ERR_NETWORK:
+              errorMessage = "Network error loading audio"
+              break
+            case audio.error.MEDIA_ERR_DECODE:
+              errorMessage = "Audio format not supported"
+              break
+            case audio.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+              errorMessage = "Audio source not supported"
+              break
+          }
+        }
+        
+        console.error("[VoiceNotePlayer] Audio error:", {
+          code: audio.error?.code,
+          message: audio.error?.message,
+          url: audioUrl,
+          errorType: errorMessage,
+        })
+        setError(errorMessage)
         setIsPlaying(false)
         setIsLoading(false)
       })
 
-      // Set source
+      // Set source with crossOrigin for CORS
+      audio.crossOrigin = "anonymous"
       audio.src = audioUrl
     }
 
