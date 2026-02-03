@@ -32,8 +32,46 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
     try {
       new URL(audioUrl)
     } catch {
-      setError("Invalid audio URL")
+      setError("Invalid audio URL format")
       console.error("[VoiceNotePlayer] Invalid URL:", audioUrl)
+      return
+    }
+
+    // Test if URL is accessible
+    const testAudio = new Audio()
+    testAudio.crossOrigin = "anonymous"
+    
+    const timeoutId = setTimeout(() => {
+      testAudio.src = ""
+      console.warn("[VoiceNotePlayer] Audio URL took too long to respond:", audioUrl)
+    }, 5000)
+
+    testAudio.addEventListener("canplay", () => {
+      clearTimeout(timeoutId)
+      testAudio.src = ""
+      // URL is accessible
+    })
+
+    testAudio.addEventListener("error", () => {
+      clearTimeout(timeoutId)
+      const code = testAudio.error?.code
+      let msg = "Audio URL not accessible"
+      if (code === 2) {
+        msg = "Network error - voice_notes bucket may not exist"
+      }
+      console.error("[VoiceNotePlayer] URL validation failed:", {
+        url: audioUrl,
+        code,
+        message: msg,
+      })
+      // Don't set error state here, wait for actual play attempt
+    })
+
+    testAudio.src = audioUrl
+
+    return () => {
+      clearTimeout(timeoutId)
+      testAudio.src = ""
     }
   }, [audioUrl])
 
@@ -64,32 +102,37 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
 
       audio.addEventListener("pause", () => setIsPlaying(false))
 
-      audio.addEventListener("error", (e) => {
-        const audio = e.target as HTMLAudioElement
+      audio.addEventListener("canplay", () => {
+        // Audio can start playing
+        setError(null)
+      })
+
+      audio.addEventListener("error", () => {
         let errorMessage = "Failed to load audio"
+        const errorCode = audio.error?.code
         
-        if (audio.error) {
-          switch (audio.error.code) {
-            case audio.error.MEDIA_ERR_ABORTED:
+        if (errorCode) {
+          switch (errorCode) {
+            case 1: // MEDIA_ERR_ABORTED
               errorMessage = "Audio loading was aborted"
               break
-            case audio.error.MEDIA_ERR_NETWORK:
-              errorMessage = "Network error loading audio"
+            case 2: // MEDIA_ERR_NETWORK
+              errorMessage = "Network error - check if voice_notes bucket exists in Supabase"
               break
-            case audio.error.MEDIA_ERR_DECODE:
-              errorMessage = "Audio format not supported"
+            case 3: // MEDIA_ERR_DECODE
+              errorMessage = "Audio format not supported or file is corrupted"
               break
-            case audio.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
               errorMessage = "Audio source not supported"
               break
           }
         }
         
-        console.error("[VoiceNotePlayer] Audio error:", {
-          code: audio.error?.code,
-          message: audio.error?.message,
+        console.error("[VoiceNotePlayer] Audio error details:", {
+          errorCode,
+          errorMessage,
           url: audioUrl,
-          errorType: errorMessage,
+          audioError: audio.error,
         })
         setError(errorMessage)
         setIsPlaying(false)
@@ -99,6 +142,9 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
       // Set source with crossOrigin for CORS
       audio.crossOrigin = "anonymous"
       audio.src = audioUrl
+      
+      // Try to load the audio
+      audio.load()
     }
 
     if (isPlaying) {
@@ -109,7 +155,7 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
         await audioRef.current.play()
       } catch (err) {
         console.error("[VoiceNotePlayer] Error playing audio:", err)
-        setError("Failed to play audio")
+        setError("Failed to play audio - check browser console")
       } finally {
         setIsLoading(false)
       }
