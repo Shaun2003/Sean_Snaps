@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
-import { notFound, redirect } from "next/navigation"
-import { ProfileContent } from "@/components/profile/profile-content"
+import { redirect, notFound } from "next/navigation"
+import { ProfileView } from "@/components/profile/profile-view"
 
-interface Props {
+export default async function UserProfilePage({
+  params,
+}: {
   params: Promise<{ username: string }>
-}
-
-export default async function ProfilePage({ params }: Props) {
+}) {
   const { username } = await params
   const supabase = await createClient()
   const {
@@ -17,20 +17,53 @@ export default async function ProfilePage({ params }: Props) {
     redirect("/auth/login")
   }
 
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(username)
-
-  let profile
-  if (isUUID) {
-    const { data } = await supabase.from("profiles").select("*").eq("id", username).single()
-    profile = data
-  } else {
-    const { data } = await supabase.from("profiles").select("*").eq("username", username).single()
-    profile = data
-  }
+  const { data: profile } = await supabase.from("profiles").select("*").eq("username", username).single()
 
   if (!profile) {
     notFound()
   }
 
-  return <ProfileContent profile={profile} currentUserId={user.id} />
+  // If viewing own profile, redirect to /profile
+  if (profile.id === user.id) {
+    redirect("/profile")
+  }
+
+  const { data: isFollowing } = await supabase
+    .from("follows")
+    .select("id")
+    .eq("follower_id", user.id)
+    .eq("following_id", profile.id)
+    .single()
+
+  let posts: any[] = []
+  if (!profile.is_private || !!isFollowing) {
+    const { data } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false })
+    posts = data || []
+  }
+
+  const { count: followersCount } = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("following_id", profile.id)
+
+  const { count: followingCount } = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("follower_id", profile.id)
+
+  return (
+    <ProfileView
+      profile={profile}
+      posts={posts}
+      followersCount={followersCount || 0}
+      followingCount={followingCount || 0}
+      isOwnProfile={false}
+      isFollowing={!!isFollowing}
+      currentUserId={user.id}
+    />
+  )
 }
