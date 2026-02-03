@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, Download } from "lucide-react"
+import { Play, Pause, Download, AlertCircle } from "lucide-react"
 import { formatSeconds } from "@/lib/voice-recorder"
 import { cn } from "@/lib/utils"
 
@@ -17,13 +17,14 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
   const [currentTime, setCurrentTime] = useState(0)
   const [totalDuration, setTotalDuration] = useState(duration)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const handlePlayPause = async () => {
     if (!audioRef.current) {
       // Create audio element
-      const audio = new Audio(audioUrl)
+      const audio = new Audio()
       audioRef.current = audio
 
       audio.addEventListener("timeupdate", () => {
@@ -32,6 +33,7 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
 
       audio.addEventListener("loadedmetadata", () => {
         setTotalDuration(Math.floor(audio.duration))
+        setError(null)
       })
 
       audio.addEventListener("ended", () => {
@@ -39,8 +41,22 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
         setCurrentTime(0)
       })
 
-      audio.addEventListener("play", () => setIsPlaying(true))
+      audio.addEventListener("play", () => {
+        setIsPlaying(true)
+        setError(null)
+      })
+
       audio.addEventListener("pause", () => setIsPlaying(false))
+
+      audio.addEventListener("error", (e) => {
+        console.error("[VoiceNotePlayer] Audio error:", e)
+        setError("Failed to load audio")
+        setIsPlaying(false)
+        setIsLoading(false)
+      })
+
+      // Set source
+      audio.src = audioUrl
     }
 
     if (isPlaying) {
@@ -49,6 +65,9 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
       setIsLoading(true)
       try {
         await audioRef.current.play()
+      } catch (err) {
+        console.error("[VoiceNotePlayer] Error playing audio:", err)
+        setError("Failed to play audio")
       } finally {
         setIsLoading(false)
       }
@@ -81,6 +100,15 @@ export function VoiceNotePlayer({ audioUrl, duration = 0, className }: VoiceNote
   }
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
+
+  if (error) {
+    return (
+      <div className={cn("flex items-center gap-2 p-3 bg-red-500/10 rounded-lg border border-red-200 dark:border-red-800", className)}>
+        <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+        <span className="text-xs text-red-600 dark:text-red-400">{error}</span>
+      </div>
+    )
+  }
 
   return (
     <div className={cn("flex items-center gap-2 p-3 bg-muted/30 rounded-lg", className)}>
