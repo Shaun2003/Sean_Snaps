@@ -70,10 +70,8 @@ export function SettingsContent({ user, profile, settings }: Props) {
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6 px-2 sm:px-4">
-      <h1 className="text-xl sm:text-2xl font-bold">Settings</h1>
-
-      <Card>
+    <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
+      <Card className="shadow-lg border-0 bg-linear-to-br from-card to-card/80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
             <User className="size-4 sm:size-5" />
@@ -94,7 +92,7 @@ export function SettingsContent({ user, profile, settings }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="shadow-lg border-0 bg-linear-to-br from-card to-card/80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 delay-100">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
             <Bell className="size-4 sm:size-5" />
@@ -143,7 +141,7 @@ export function SettingsContent({ user, profile, settings }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="shadow-lg border-0 bg-linear-to-br from-card to-card/80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 delay-200">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
             <Lock className="size-4 sm:size-5" />
@@ -164,7 +162,7 @@ export function SettingsContent({ user, profile, settings }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="shadow-lg border-0 bg-linear-to-br from-card to-card/80 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 delay-300">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
             <Palette className="size-4 sm:size-5" />
@@ -197,7 +195,7 @@ export function SettingsContent({ user, profile, settings }: Props) {
 
       <Separator />
 
-      <Card className="border-destructive/50">
+      <Card className="shadow-lg border-0 bg-linear-to-br from-destructive/5 to-destructive/10 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 delay-400">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-destructive text-base sm:text-lg">Danger Zone</CardTitle>
         </CardHeader>

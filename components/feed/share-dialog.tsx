@@ -185,9 +185,36 @@ export function ShareDialog({ open, onOpenChange, post, currentUserId }: ShareDi
           </TabsContent>
 
           <TabsContent value="reshare" className="space-y-4">
-            <div className="text-center py-6 sm:py-8">
-              <Share2 className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-muted-foreground mb-3 sm:mb-4" />
-              <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">Share this post to your profile</p>
+            <div className="border rounded-lg p-3 sm:p-4 bg-muted/50">
+              {/* Shared by info */}
+              <div className="flex items-center gap-2 mb-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={post.profiles?.avatar_url || ""} />
+                  <AvatarFallback>{post.profiles?.display_name?.[0] || "U"}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-xs sm:text-sm truncate">{post.profiles?.username}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{post.profiles?.display_name}</p>
+                </div>
+              </div>
+
+              {/* Post preview */}
+              <div className="space-y-2">
+                {post.image_url && (
+                  <img 
+                    src={post.image_url} 
+                    alt="Post preview" 
+                    className="w-full h-40 sm:h-48 object-cover rounded-md"
+                  />
+                )}
+                {post.content && (
+                  <p className="text-xs sm:text-sm line-clamp-2">{post.content}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="text-center py-4">
+              <p className="text-xs sm:text-sm text-muted-foreground mb-4">This post will be shared to your profile</p>
               <Button onClick={handleReshare} disabled={isResharing} size="sm">
                 {isResharing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Reshare to Profile

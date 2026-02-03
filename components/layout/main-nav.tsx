@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Search, PlusSquare, MessageCircle, Bell, User, Camera } from "lucide-react"
+import { Home, Search, PlusSquare, MessageCircle, Bell, User, Camera, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface MainNavProps {
@@ -31,7 +31,7 @@ export function MainNav({ unreadMessages = 0, unreadNotifications = 0 }: MainNav
           <div className="flex h-7 w-7 lg:h-8 lg:w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Camera className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
           </div>
-          <span className="text-lg lg:text-xl font-bold">Sean Snaps</span>
+          <span className="text-lg lg:text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-blue-500 via-purple-500 to-pink-500">Sean Snaps</span>
         </Link>
 
         <nav className="flex flex-col gap-0.5 lg:gap-1">

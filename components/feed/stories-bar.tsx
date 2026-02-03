@@ -99,7 +99,7 @@ export function StoriesBar({ userId }: StoriesBarProps) {
     <>
       <div className="flex gap-3 overflow-x-auto pb-4 mb-4 scrollbar-hide">
         {/* Your Story */}
-        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+        <div className="flex flex-col items-center gap-1 shrink-0">
           <button
             onClick={() =>
               myStories.length > 0
@@ -110,8 +110,8 @@ export function StoriesBar({ userId }: StoriesBarProps) {
           >
             <div
               className={cn(
-                "rounded-full p-[2px]",
-                myStories.length > 0 ? "bg-gradient-to-tr from-primary to-pink-500" : "bg-muted",
+                "rounded-full p-0.5",
+                myStories.length > 0 ? "bg-linear-to-tr from-primary to-pink-500" : "bg-muted",
               )}
             >
               <Avatar className="h-14 w-14 sm:h-16 sm:w-16 border-2 border-background">
@@ -128,7 +128,7 @@ export function StoriesBar({ userId }: StoriesBarProps) {
           <span className="text-[10px] sm:text-xs text-muted-foreground">Your story</span>
         </div>
 
-        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+        <div className="flex flex-col items-center gap-1 shrink-0">
           <Button
             variant="outline"
             size="icon"
@@ -140,27 +140,24 @@ export function StoriesBar({ userId }: StoriesBarProps) {
           <span className="text-[10px] sm:text-xs text-muted-foreground">Add story</span>
         </div>
 
-        {/* Other Stories - only from followed users */}
-        {storyGroups.map((group) => (
-          <div key={group.user.id} className="flex flex-col items-center gap-1 flex-shrink-0">
-            <button onClick={() => setSelectedGroup(group)}>
-              <div
-                className={cn(
-                  "rounded-full p-[2px]",
-                  group.hasUnviewed ? "bg-gradient-to-tr from-primary to-pink-500" : "bg-muted",
-                )}
-              >
-                <Avatar className="h-14 w-14 sm:h-16 sm:w-16 border-2 border-background">
-                  <AvatarImage src={group.user.avatar_url || ""} />
-                  <AvatarFallback>{group.user.display_name?.[0] || "U"}</AvatarFallback>
-                </Avatar>
-              </div>
-            </button>
-            <span className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[56px] sm:max-w-[64px]">
-              {group.user.username}
-            </span>
-          </div>
-        ))}
+        {/* Other Stories - only from followed users with unviewed stories */}
+        {storyGroups
+          .filter((group) => group.hasUnviewed)
+          .map((group) => (
+            <div key={group.user.id} className="flex flex-col items-center gap-1 shrink-0">
+              <button onClick={() => setSelectedGroup(group)}>
+                <div className="rounded-full p-0.5 bg-linear-to-tr from-primary to-pink-500">
+                  <Avatar className="h-14 w-14 sm:h-16 sm:w-16 border-2 border-background">
+                    <AvatarImage src={group.user.avatar_url || ""} />
+                    <AvatarFallback>{group.user.display_name?.[0] || "U"}</AvatarFallback>
+                  </Avatar>
+                </div>
+              </button>
+              <span className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-14 sm:max-w-16">
+                {group.user.username}
+              </span>
+            </div>
+          ))}
       </div>
 
       {selectedGroup && (

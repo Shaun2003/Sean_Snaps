@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Heart, ThumbsUp, Laugh, Smile, CornerDownRight } from "lucide-react"
+import { Send, Heart, ThumbsUp, Laugh, Smile, CornerDownRight, Smile as SmileIcon } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -23,6 +23,8 @@ interface CommentsSheetProps {
   postId: string
   currentUserId: string
 }
+
+const EMOJI_REACTIONS = ["❤️", "😂", "😮", "😢", "🔥", "👏", "🙏"]
 
 const reactionIcons = {
   like: ThumbsUp,
@@ -63,7 +65,7 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
     if (data) {
       // Fetch replies for each comment
       const commentsWithReplies = await Promise.all(
-        data.map(async (comment) => {
+        data.map(async (comment: any) => {
           const { data: replies } = await supabase
             .from("comments")
             .select(`
@@ -107,31 +109,42 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
     setIsSubmitting(false)
   }
 
-  const handleReaction = async (commentId: string, reactionType: string) => {
+  const handleReaction = async (commentId: string, emoji: string) => {
     const supabase = createClient()
 
-    // Check if already reacted
+    // Check if user already has a reaction for this emoji on this comment
     const { data: existing } = await supabase
       .from("comment_reactions")
-      .select("*")
+      .select("id")
       .eq("comment_id", commentId)
       .eq("user_id", currentUserId)
-      .single()
+      .eq("emoji", emoji)
 
-    if (existing) {
-      if (existing.reaction_type === reactionType) {
-        // Remove reaction
-        await supabase.from("comment_reactions").delete().eq("id", existing.id)
-      } else {
-        // Update reaction
-        await supabase.from("comment_reactions").update({ reaction_type: reactionType }).eq("id", existing.id)
-      }
+    if (existing && existing.length > 0) {
+      // User already reacted with this emoji - remove it
+      await supabase.from("comment_reactions").delete().eq("id", existing[0].id)
     } else {
-      // Add new reaction
+      // Delete user's existing reaction (if any) before adding new one
+      // This ensures user can only have one emoji reaction per comment
+      const { data: userReactions } = await supabase
+        .from("comment_reactions")
+        .select("id")
+        .eq("comment_id", commentId)
+        .eq("user_id", currentUserId)
+
+      if (userReactions && userReactions.length > 0) {
+        await supabase
+          .from("comment_reactions")
+          .delete()
+          .eq("comment_id", commentId)
+          .eq("user_id", currentUserId)
+      }
+
+      // Insert new emoji reaction
       await supabase.from("comment_reactions").insert({
         comment_id: commentId,
         user_id: currentUserId,
-        reaction_type: reactionType,
+        emoji: emoji,
       })
     }
 
@@ -154,8 +167,8 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
     const userReaction = comment.comment_reactions?.find((r: { user_id: string }) => r.user_id === currentUserId)
     const reactionCounts =
       comment.comment_reactions?.reduce(
-        (acc: Record<string, number>, r: { reaction_type: string }) => {
-          acc[r.reaction_type] = (acc[r.reaction_type] || 0) + 1
+        (acc: Record<string, number>, r: { emoji: string }) => {
+          acc[r.emoji] = (acc[r.emoji] || 0) + 1
           return acc
         },
         {} as Record<string, number>,
@@ -163,7 +176,7 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
 
     return (
       <div key={comment.id} className={cn("flex gap-3", isReply && "ml-10")}>
-        <Avatar className="h-8 w-8 flex-shrink-0">
+        <Avatar className="h-8 w-8 shrink-0">
           <AvatarImage src={profile.avatar_url || ""} />
           <AvatarFallback>{profile.display_name?.[0] || "U"}</AvatarFallback>
         </Avatar>
@@ -178,7 +191,7 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
               {format(new Date(comment.created_at), "MMM d 'at' h:mm a")}
             </span>
 
-            {/* Reaction buttons */}
+            {/* Reaction buttons - use emoji dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -186,26 +199,21 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
                   size="sm"
                   className={cn("h-auto p-0 text-xs", userReaction && "text-primary font-semibold")}
                 >
-                  {userReaction ? reactionLabels[userReaction.reaction_type as keyof typeof reactionLabels] : "React"}
+                  {userReaction ? `${userReaction.emoji} Reacted` : "React"}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="flex gap-1 p-1">
-                {(["like", "love", "laugh", "care", "finger"] as const).map((type) => {
-                  const Icon = reactionIcons[type]
-                  return (
-                    <Button
-                      key={type}
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleReaction(comment.id, type)}
-                    >
-                      <Icon
-                        className={cn("h-4 w-4", type === "love" && "text-red-500", type === "like" && "text-blue-500")}
-                      />
-                    </Button>
-                  )
-                })}
+                {EMOJI_REACTIONS.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-lg"
+                    onClick={() => handleReaction(comment.id, emoji)}
+                  >
+                    {emoji}
+                  </Button>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -283,12 +291,12 @@ export function CommentsSheet({ open, onOpenChange, postId, currentUserId }: Com
           )}
           <div className="flex gap-2">
             <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-              <PopoverTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
+              <PopoverTrigger asChild suppressHydrationWarning>
+                <Button type="button" variant="ghost" size="icon" className="shrink-0">
                   <Smile className="h-5 w-5" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent className="w-auto p-0" align="start" suppressHydrationWarning>
                 <Picker data={data} onEmojiSelect={handleEmojiSelect} theme="auto" />
               </PopoverContent>
             </Popover>

@@ -3,15 +3,16 @@
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Post, Profile, Comment } from "@/lib/types"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Heart, MessageCircle, Share2, Send, ThumbsUp, Laugh, Smile } from "lucide-react"
+import { Heart, MessageCircle, Share2, Send, ThumbsUp, Laugh, Smile, MoreHorizontal, Pencil, X } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 interface PostDetailDialogProps {
   post: Post & { profiles: Profile; likes_count: number; comments_count: number }
@@ -19,6 +20,8 @@ interface PostDetailDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
+
+const EMOJI_REACTIONS = ["❤️", "😂", "😮", "😢", "🔥", "👏", "🙏"]
 
 const reactionIcons = {
   like: ThumbsUp,
@@ -34,6 +37,9 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
   const [isLiked, setIsLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(post.likes_count)
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState("")
+  const [showOpinion, setShowOpinion] = useState(false)
 
   const fetchComments = useCallback(async () => {
     const supabase = createClient()
@@ -67,14 +73,19 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
 
   const checkLiked = useCallback(async () => {
     const supabase = createClient()
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("post_likes")
       .select("id")
       .eq("post_id", post.id)
       .eq("user_id", currentUserId)
-      .single()
+      .maybeSingle()
 
-    setIsLiked(!!data)
+    if (error) {
+      console.error("Error checking liked status:", error)
+      setIsLiked(false)
+    } else {
+      setIsLiked(!!data)
+    }
   }, [post.id, currentUserId])
 
   useEffect(() => {
@@ -117,40 +128,128 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
     fetchComments()
   }
 
-  const handleReaction = async (commentId: string, reactionType: string) => {
+  const handleReaction = async (commentId: string, emoji: string) => {
     const supabase = createClient()
 
+    // Check if user already has a reaction for this emoji on this comment
     const { data: existing } = await supabase
       .from("comment_reactions")
-      .select("*")
+      .select("id")
       .eq("comment_id", commentId)
       .eq("user_id", currentUserId)
-      .single()
+      .eq("emoji", emoji)
 
-    if (existing) {
-      if (existing.reaction_type === reactionType) {
-        await supabase.from("comment_reactions").delete().eq("id", existing.id)
-      } else {
-        await supabase.from("comment_reactions").update({ reaction_type: reactionType }).eq("id", existing.id)
-      }
+    if (existing && existing.length > 0) {
+      // User already reacted with this emoji - remove it
+      await supabase.from("comment_reactions").delete().eq("id", existing[0].id)
     } else {
+      // Delete user's existing reaction (if any) before adding new one
+      // This ensures user can only have one emoji reaction per comment
+      const { data: userReactions } = await supabase
+        .from("comment_reactions")
+        .select("id")
+        .eq("comment_id", commentId)
+        .eq("user_id", currentUserId)
+
+      if (userReactions && userReactions.length > 0) {
+        await supabase
+          .from("comment_reactions")
+          .delete()
+          .eq("comment_id", commentId)
+          .eq("user_id", currentUserId)
+      }
+
+      // Insert new emoji reaction
       await supabase.from("comment_reactions").insert({
         comment_id: commentId,
         user_id: currentUserId,
-        reaction_type: reactionType,
+        emoji: emoji,
       })
     }
 
     fetchComments()
   }
 
+  const handleUnfollow = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.from("followers").delete().eq("follower_id", currentUserId).eq("following_id", post.user_id)
+    } catch (err) {
+      console.error("Error unfollowing:", err)
+    }
+  }
+
+  const handleMute = async () => {
+    try {
+      const supabase = createClient()
+      const { data: existing } = await supabase
+        .from("muted_users")
+        .select("id")
+        .eq("user_id", currentUserId)
+        .eq("muted_user_id", post.user_id)
+        .single()
+
+      if (!existing) {
+        await supabase.from("muted_users").insert({
+          user_id: currentUserId,
+          muted_user_id: post.user_id,
+        })
+      }
+    } catch (err) {
+      console.error("Error muting user:", err)
+    }
+  }
+
+  const handleReport = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.from("reports").insert({
+        reported_by: currentUserId,
+        reported_user_id: post.user_id,
+        post_id: post.id,
+        reason: "Inappropriate content",
+      })
+      alert("Post reported successfully. Our team will review it shortly.")
+    } catch (err) {
+      console.error("Error reporting post:", err)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this post?")) return
+    try {
+      const supabase = createClient()
+      await supabase.from("posts").delete().eq("id", post.id).eq("user_id", currentUserId)
+      onOpenChange(false)
+    } catch (err) {
+      console.error("Error deleting post:", err)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      const supabase = createClient()
+      await supabase
+        .from("posts")
+        .update({ content: editContent, updated_at: new Date().toISOString() })
+        .eq("id", post.id)
+        .eq("user_id", currentUserId)
+
+      setIsEditing(false)
+      fetchComments()
+    } catch (err) {
+      console.error("Error updating post:", err)
+    }
+  }
+
   const renderComment = (comment: Comment, isReply = false) => {
     const profile = comment.profiles as Profile
+    // Find user's reaction on this comment (look for emoji field, not reaction_type)
     const userReaction = comment.comment_reactions?.find((r: { user_id: string }) => r.user_id === currentUserId)
 
     return (
       <div key={comment.id} className={cn("flex gap-2", isReply && "ml-8")}>
-        <Avatar className="h-8 w-8 flex-shrink-0">
+        <Avatar className="h-8 w-8 shrink-0">
           <AvatarImage src={profile.avatar_url || ""} />
           <AvatarFallback>{profile.display_name?.[0]}</AvatarFallback>
         </Avatar>
@@ -162,24 +261,21 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
           <div className="flex items-center gap-3 mt-1 px-2 text-xs text-muted-foreground">
             <span>{format(new Date(comment.created_at), "MMM d, h:mm a")}</span>
             <DropdownMenu>
-              <DropdownMenuTrigger className="hover:text-foreground">
-                {userReaction ? "Reacted" : "React"}
+              <DropdownMenuTrigger className="hover:text-foreground text-xs">
+                {userReaction ? `${userReaction.emoji} Reacted` : "React"}
               </DropdownMenuTrigger>
               <DropdownMenuContent className="flex gap-1 p-1">
-                {(["like", "love", "laugh", "care", "finger"] as const).map((type) => {
-                  const Icon = reactionIcons[type]
-                  return (
-                    <Button
-                      key={type}
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleReaction(comment.id, type)}
-                    >
-                      <Icon className={cn("h-4 w-4", type === "love" && "text-red-500")} />
-                    </Button>
-                  )
-                })}
+                {EMOJI_REACTIONS.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-lg"
+                    onClick={() => handleReaction(comment.id, emoji)}
+                  >
+                    {emoji}
+                  </Button>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
             {!isReply && (
@@ -200,6 +296,10 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden">
+        <VisuallyHidden>
+          <DialogTitle>Post Details</DialogTitle>
+          <DialogDescription>View and interact with post details including comments and reactions</DialogDescription>
+        </VisuallyHidden>
         <div className="flex flex-col md:flex-row max-h-[90vh]">
           {/* Image */}
           {post.image_url && (
@@ -215,28 +315,98 @@ export function PostDetailDialog({ post, currentUserId, open, onOpenChange }: Po
           {/* Content */}
           <div className={cn("flex flex-col", post.image_url ? "md:w-1/2" : "w-full")}>
             {/* Header */}
-            <div className="flex items-center gap-3 p-4 border-b">
-              <Link href={`/profile/${post.profiles.id}`}>
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={post.profiles.avatar_url || ""} />
-                  <AvatarFallback>{post.profiles.display_name?.[0]}</AvatarFallback>
-                </Avatar>
-              </Link>
-              <div>
-                <Link href={`/profile/${post.profiles.id}`} className="font-semibold text-sm hover:underline">
-                  {post.profiles.username}
+            <div className="flex items-center justify-between gap-3 p-4 border-b">
+              <div className="flex items-center gap-3">
+                <Link href={`/profile/${post.profiles.id}`}>
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={post.profiles.avatar_url || ""} />
+                    <AvatarFallback>{post.profiles.display_name?.[0]}</AvatarFallback>
+                  </Avatar>
                 </Link>
-                <p className="text-xs text-muted-foreground">
-                  {format(new Date(post.created_at), "MMM d, yyyy 'at' h:mm a")}
-                </p>
+                <div>
+                  <Link href={`/profile/${post.profiles.id}`} className="font-semibold text-sm hover:underline">
+                    {post.profiles.username}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(post.created_at), "MMM d, yyyy 'at' h:mm a")}
+                  </p>
+                </div>
               </div>
+              
+              {/* Menu */}
+              {post.user_id === currentUserId ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setIsEditing(true)
+                        setEditContent(post.content || "")
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                      onClick={() => setShowOpinion(!showOpinion)}
+                      className="cursor-pointer"
+                    >
+                      {showOpinion ? "Hide" : "Show"} Opinion
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleUnfollow} className="cursor-pointer hover:bg-accent">
+                      Unfollow
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleMute} className="cursor-pointer hover:bg-accent">
+                      Mute
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleReport} className="text-destructive cursor-pointer hover:bg-destructive/10">
+                      Report
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
 
             {/* Caption */}
-            {post.content && (
-              <div className="p-4 border-b">
-                <p className="text-sm">{post.content}</p>
+            {isEditing ? (
+              <div className="p-4 border-b space-y-2">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full p-2 border rounded-md bg-background resize-none"
+                  rows={3}
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                    <X className="h-4 w-4 mr-2" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveEdit}>
+                    Save
+                  </Button>
+                </div>
               </div>
+            ) : (
+              post.content && (
+                <div className="p-4 border-b">
+                  <p className="text-sm">{post.content}</p>
+                </div>
+              )
             )}
 
             {/* Comments */}

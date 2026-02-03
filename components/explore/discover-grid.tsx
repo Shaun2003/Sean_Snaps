@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Post, Profile } from "@/lib/types"
-import { Heart, MessageCircle } from "lucide-react"
+import { MessageCircle } from "lucide-react"
 import { PostDetailDialog } from "./post-detail-dialog"
 
 interface DiscoverGridProps {
@@ -28,7 +28,7 @@ export function DiscoverGrid({ userId }: DiscoverGridProps) {
         .from("posts")
         .select(`
           *,
-          profiles (*),
+          profiles!posts_user_id_fkey(*),
           post_likes (id),
           comments (id)
         `)
@@ -65,7 +65,6 @@ export function DiscoverGrid({ userId }: DiscoverGridProps) {
             />
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 sm:gap-4">
               <span className="flex items-center gap-0.5 sm:gap-1 text-white font-semibold text-xs sm:text-sm">
-                <Heart className="h-3 w-3 sm:h-5 sm:w-5 fill-white" />
                 {post.likes_count}
               </span>
               <span className="flex items-center gap-0.5 sm:gap-1 text-white font-semibold text-xs sm:text-sm">
