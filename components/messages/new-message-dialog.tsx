@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Profile } from "@/lib/types"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search } from "lucide-react"
@@ -85,6 +86,9 @@ export function NewMessageDialog({ open, onOpenChange, userId, onConversationCre
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New Message</DialogTitle>
+          <VisuallyHidden asChild>
+            <DialogDescription>Start a new message with a user</DialogDescription>
+          </VisuallyHidden>
         </DialogHeader>
 
         <div className="space-y-4">
