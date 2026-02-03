@@ -266,11 +266,27 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
     const supabase = createClient()
     
     try {
+      // Convert blob URL to blob if it's a blob URL
+      const response = await fetch(audioUrl)
+      const blob = await response.blob()
+      
+      // Upload to Supabase storage
+      const fileName = `${userId}/${conversationId}/${Date.now()}.webm`
+      const { error: uploadError } = await supabase.storage.from("voice_notes").upload(fileName, blob)
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data } = supabase.storage.from("voice_notes").getPublicUrl(fileName)
+      
+      if (!data?.publicUrl) throw new Error("Failed to get public URL")
+
+      // Save message with file URL
       await supabase.from("messages").insert({
         conversation_id: conversationId,
         user_id: userId,
         content: `Voice note (${Math.floor(duration)}s)`,
-        file_url: audioUrl,
+        file_url: data.publicUrl,
         file_type: "audio/webm",
       })
 
@@ -283,6 +299,7 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         description: "Your voice message has been sent",
       })
     } catch (error) {
+      console.error("[ChatView] Error sending voice note:", error)
       toast({
         title: "Error",
         description: "Failed to send voice note",
