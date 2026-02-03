@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Profile } from "@/lib/types"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -86,6 +87,9 @@ export function CreateGroupDialog({ open, onOpenChange, userId, onCreated }: Cre
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Group Chat</DialogTitle>
+          <VisuallyHidden asChild>
+            <DialogDescription>Create a new group chat with selected members</DialogDescription>
+          </VisuallyHidden>
         </DialogHeader>
 
         <div className="space-y-4">
