@@ -42,42 +42,48 @@ export function NewMessageDialog({ open, onOpenChange, userId, onConversationCre
   const handleSelectUser = async (selectedUserId: string) => {
     const supabase = createClient()
 
-    // Check if conversation already exists
-    const { data: existingParticipations } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("user_id", userId)
+    try {
+      // Check if conversation already exists
+      const { data: existingParticipations } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id, conversations(id, is_group)")
+        .eq("user_id", userId)
 
-    if (existingParticipations) {
-      for (const p of existingParticipations) {
-        const { data: otherParticipant } = await supabase
-          .from("conversation_participants")
-          .select("user_id, conversations (is_group)")
-          .eq("conversation_id", p.conversation_id)
-          .neq("user_id", userId)
-          .single()
+      if (existingParticipations && existingParticipations.length > 0) {
+        for (const p of existingParticipations) {
+          const { data: otherParticipants } = await supabase
+            .from("conversation_participants")
+            .select("user_id")
+            .eq("conversation_id", p.conversation_id)
+            .neq("user_id", userId)
 
-        if (
-          otherParticipant?.user_id === selectedUserId &&
-          !(otherParticipant.conversations as { is_group: boolean })?.is_group
-        ) {
-          onConversationCreated(p.conversation_id)
-          return
+          // Check if this is a 1-on-1 conversation with the selected user
+          if (
+            otherParticipants &&
+            otherParticipants.length === 1 &&
+            otherParticipants[0]?.user_id === selectedUserId &&
+            !(p.conversations as any)?.is_group
+          ) {
+            onConversationCreated(p.conversation_id)
+            return
+          }
         }
       }
-    }
 
-    // Create new conversation
-    const { data: newConv } = await supabase.from("conversations").insert({ is_group: false }).select().single()
+      // Create new conversation
+      const { data: newConv } = await supabase.from("conversations").insert({ is_group: false }).select().single()
 
-    if (newConv) {
-      // Add both participants
-      await supabase.from("conversation_participants").insert([
-        { conversation_id: newConv.id, user_id: userId },
-        { conversation_id: newConv.id, user_id: selectedUserId },
-      ])
+      if (newConv) {
+        // Add both participants
+        await supabase.from("conversation_participants").insert([
+          { conversation_id: newConv.id, user_id: userId },
+          { conversation_id: newConv.id, user_id: selectedUserId },
+        ])
 
-      onConversationCreated(newConv.id)
+        onConversationCreated(newConv.id)
+      }
+    } catch (error) {
+      console.error("Error creating or finding conversation:", error)
     }
   }
 
