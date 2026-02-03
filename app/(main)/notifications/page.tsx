@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { NotificationsView } from "@/components/notifications/notifications-view"
+import { redirect } from "next/navigation"
+import { NotificationsContent } from "@/components/notifications/notifications-content"
 
 export default async function NotificationsPage() {
   const supabase = await createClient()
@@ -12,28 +12,11 @@ export default async function NotificationsPage() {
     redirect("/auth/login")
   }
 
-  const { data: notifications } = await supabase
-    .from("notifications")
-    .select(`
-      *,
-      actor:profiles!notifications_actor_id_fkey (
-        id,
-        username,
-        full_name,
-        avatar_url
-      ),
-      post:posts (
-        id,
-        image_url,
-        caption
-      )
-    `)
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(50)
-
-  // Mark all as read
-  await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false)
-
-  return <NotificationsView notifications={notifications || []} currentUserId={user.id} />
+  return (
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-muted/20">
+      <div className="w-full mx-auto px-2 sm:px-3 lg:px-4 py-4 sm:py-6 lg:py-8 max-w-2xl">
+        <NotificationsContent userId={user.id} />
+      </div>
+    </div>
+  )
 }

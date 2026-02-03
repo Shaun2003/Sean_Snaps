@@ -1,42 +1,43 @@
-import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { ProfileView } from "@/components/profile/profile-view"
+"use client"
 
-export default async function ProfilePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
+import { Loader2 } from "lucide-react"
 
-  if (!user) {
-    redirect("/auth/login")
-  }
+export default function ProfileRedirect() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+  useEffect(() => {
+    const redirectToProfile = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-  const { data: posts } = await supabase
-    .from("posts")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+      if (!user) {
+        router.replace("/auth/login")
+        return
+      }
 
-  const { count: followersCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("following_id", user.id)
+      // Fetch the user's profile to get their username
+      const { data: profile } = await supabase.from("profiles").select("username").eq("id", user.id).single()
 
-  const { count: followingCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("follower_id", user.id)
+      if (profile?.username) {
+        router.replace(`/profile/${profile.username}`)
+      } else {
+        // If no username, redirect to settings to set one up
+        router.replace("/settings")
+      }
+    }
+
+    redirectToProfile()
+  }, [router])
 
   return (
-    <ProfileView
-      profile={profile}
-      posts={posts || []}
-      followersCount={followersCount || 0}
-      followingCount={followingCount || 0}
-      isOwnProfile={true}
-    />
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
   )
 }

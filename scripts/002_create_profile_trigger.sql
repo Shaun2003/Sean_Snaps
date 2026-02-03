@@ -6,14 +6,19 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.profiles (id, username, full_name, avatar_url)
+  INSERT INTO public.profiles (id, username, display_name)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data ->> 'username', SPLIT_PART(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data ->> 'full_name', ''),
-    COALESCE(NEW.raw_user_meta_data ->> 'avatar_url', '')
+    COALESCE(NEW.raw_user_meta_data ->> 'username', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data ->> 'display_name', split_part(NEW.email, '@', 1))
   )
   ON CONFLICT (id) DO NOTHING;
+
+  -- Also create default user settings
+  INSERT INTO public.user_settings (id)
+  VALUES (NEW.id)
+  ON CONFLICT (id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$;

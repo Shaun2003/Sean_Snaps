@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect, notFound } from "next/navigation"
-import { ProfileView } from "@/components/profile/profile-view"
+import { notFound, redirect } from "next/navigation"
+import { ProfileContent } from "@/components/profile/profile-content"
 
-export default async function UserProfilePage({
-  params,
-}: {
+interface Props {
   params: Promise<{ username: string }>
-}) {
+}
+
+export default async function ProfilePage({ params }: Props) {
   const { username } = await params
   const supabase = await createClient()
   const {
@@ -17,53 +17,26 @@ export default async function UserProfilePage({
     redirect("/auth/login")
   }
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("username", username).single()
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(username)
+
+  let profile
+  if (isUUID) {
+    const { data } = await supabase.from("profiles").select("*").eq("id", username).single()
+    profile = data
+  } else {
+    const { data } = await supabase.from("profiles").select("*").eq("username", username).single()
+    profile = data
+  }
 
   if (!profile) {
     notFound()
   }
 
-  // If viewing own profile, redirect to /profile
-  if (profile.id === user.id) {
-    redirect("/profile")
-  }
-
-  const { data: isFollowing } = await supabase
-    .from("follows")
-    .select("id")
-    .eq("follower_id", user.id)
-    .eq("following_id", profile.id)
-    .single()
-
-  let posts: any[] = []
-  if (!profile.is_private || !!isFollowing) {
-    const { data } = await supabase
-      .from("posts")
-      .select("*")
-      .eq("user_id", profile.id)
-      .order("created_at", { ascending: false })
-    posts = data || []
-  }
-
-  const { count: followersCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("following_id", profile.id)
-
-  const { count: followingCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("follower_id", profile.id)
-
   return (
-    <ProfileView
-      profile={profile}
-      posts={posts}
-      followersCount={followersCount || 0}
-      followingCount={followingCount || 0}
-      isOwnProfile={false}
-      isFollowing={!!isFollowing}
-      currentUserId={user.id}
-    />
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-muted/20">
+      <div className="w-full mx-auto px-2 sm:px-3 lg:px-4 py-4 sm:py-6 lg:py-8">
+        <ProfileContent profile={profile} currentUserId={user.id} />
+      </div>
+    </div>
   )
 }

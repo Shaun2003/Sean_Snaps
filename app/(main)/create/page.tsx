@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { CreatePostForm } from "@/components/post/create-post-form"
+import { CreatePostForm } from "@/components/create/create-post-form"
 
 export default async function CreatePage() {
   const supabase = await createClient()
@@ -13,9 +13,10 @@ export default async function CreatePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-lg">
-      <h1 className="text-2xl font-semibold mb-6">Create Post</h1>
-      <CreatePostForm userId={user.id} />
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-muted/20 flex items-center justify-center p-2 sm:p-4">
+      <div className="w-full max-w-4xl">
+        <CreatePostForm userId={user.id} />
+      </div>
     </div>
   )
 }

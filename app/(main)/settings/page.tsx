@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { SettingsView } from "@/components/settings/settings-view"
+import { SettingsContent } from "@/components/settings/settings-content"
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -12,7 +12,15 @@ export default async function SettingsPage() {
     redirect("/auth/login")
   }
 
-  const { data: profile } = await supabase.from("profiles").select("is_private").eq("id", user.id).single()
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-  return <SettingsView userEmail={user.email || ""} userId={user.id} initialIsPrivate={profile?.is_private || false} />
+  const { data: settings } = await supabase.from("user_settings").select("*").eq("user_id", user.id).single()
+
+  return (
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-muted/20">
+      <div className="w-full mx-auto px-2 sm:px-3 lg:px-4 py-4 sm:py-6 lg:py-8 max-w-2xl">
+        <SettingsContent user={user} profile={profile} settings={settings} />
+      </div>
+    </div>
+  )
 }
