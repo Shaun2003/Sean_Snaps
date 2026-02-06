@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { HashtagPage } from "@/components/explore/hashtag-page"
 
+export const dynamic = "force-dynamic"
+
 export default async function TagPage({ params }: { params: { slug: string } }) {
   const supabase = await createClient()
 

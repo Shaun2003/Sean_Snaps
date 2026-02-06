@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { SettingsContent } from "@/components/settings/settings-content"
 
+export const dynamic = "force-dynamic"
+
 export default async function SettingsPage() {
   const supabase = await createClient()
   const {

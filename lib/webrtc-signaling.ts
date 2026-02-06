@@ -25,7 +25,33 @@ export class CallSignalingManager {
 
   async initialize(constraints: MediaStreamConstraints): Promise<MediaStream> {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log("[WebRTC] Requesting media with constraints:", constraints)
+      
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
+        console.log("[WebRTC] Media stream obtained successfully")
+      } catch (mediaError: any) {
+        console.error("[WebRTC] getUserMedia failed:", mediaError)
+        
+        // Handle specific error types
+        const errorName = mediaError.name || "Unknown"
+        let userMessage = "Could not access camera/microphone"
+        
+        if (errorName === "NotAllowedError") {
+          userMessage = "Permission denied. Please allow camera/microphone access in your browser settings"
+        } else if (errorName === "NotFoundError") {
+          userMessage = "Camera/microphone not found. Please check your device"
+        } else if (errorName === "NotReadableError") {
+          userMessage = "Camera/microphone is already in use by another application"
+        } else if (errorName === "SecurityError") {
+          userMessage = "HTTPS is required for camera/microphone access"
+        } else if (errorName === "TypeError") {
+          userMessage = "Camera/microphone request failed"
+        }
+        
+        console.error(`[WebRTC] Media Error (${errorName}): ${userMessage}`)
+        throw new Error(`${userMessage} (${errorName})`)
+      }
 
       const config: RTCConfiguration = {
         iceServers: [
@@ -39,6 +65,7 @@ export class CallSignalingManager {
 
       // Add local tracks
       this.localStream.getTracks().forEach((track) => {
+        console.log(`[WebRTC] Adding local track: ${track.kind}`)
         if (this.peerConnection && this.localStream) {
           this.peerConnection.addTrack(track, this.localStream)
         }
@@ -85,13 +112,46 @@ export class CallSignalingManager {
       this.signalChannel = this.supabase
         .channel(channelName)
         .on("broadcast", { event: "signal" }, async (message: any) => {
-          console.log("[WebRTC] Received signal:", message.payload.type)
+          console.log("[WebRTC] Received signal via broadcast:", message.payload.type)
           await this.handleSignal(message.payload as RTCSignal)
         })
         .subscribe((status: string) => {
           console.log(`[WebRTC] Channel subscription status: ${status}`)
         })
+
+      // Also poll database for signals as fallback
+      this.pollForSignals()
     }
+  }
+
+  private pollForSignals() {
+    // Poll every 1 second for signals from the other user
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: signals, error } = await this.supabase
+          .from("call_signals")
+          .select("*")
+          .eq("call_id", this.callId)
+          .eq("to_user_id", this.currentUserId)
+          .gt("created_at", new Date(Date.now() - 5000).toISOString()) // Only last 5 seconds
+          .order("created_at", { ascending: true })
+
+        if (!error && signals && signals.length > 0) {
+          for (const signal of signals) {
+            console.log(`[WebRTC] Processing signal from DB: ${signal.signal_type}`)
+            await this.handleSignal({
+              type: signal.signal_type as "offer" | "answer" | "ice-candidate",
+              data: signal.signal_data,
+            })
+          }
+        }
+      } catch (error) {
+        console.error("[WebRTC] Error polling signals:", error)
+      }
+    }, 1000)
+
+    // Stop polling after 2 minutes of connection established
+    setTimeout(() => clearInterval(pollInterval), 120000)
   }
 
   async sendSignal(signal: RTCSignal) {

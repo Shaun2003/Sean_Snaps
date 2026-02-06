@@ -131,26 +131,65 @@ export class VoiceRecorder {
     blob: Blob,
     supabase: any,
     userId: string,
-    conversationId?: string
+    conversationId?: string,
+    mimeType: string = "audio/webm"
   ): Promise<string> {
-    const filename = `voice-notes/${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webm`
+    // Determine file extension based on MIME type
+    let extension = "webm"
+    if (mimeType.includes("mp4")) extension = "mp4"
+    else if (mimeType.includes("mpeg")) extension = "mp3"
+    else if (mimeType.includes("wav")) extension = "wav"
+    else if (mimeType.includes("ogg")) extension = "ogg"
+    
+    const filename = `${userId}/${conversationId || 'general'}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`
 
-    const { error, data } = await supabase.storage
-      .from("messages")
-      .upload(filename, blob, {
-        contentType: "audio/webm",
-        upsert: false,
-      })
+    try {
+      // Detect which bucket is available
+      let bucketName = "voice_notes"
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
+      
+      console.log("[VoiceRecorder] Available buckets:", buckets?.map((b: any) => b.name))
+      console.log("[VoiceRecorder] Uploading with MIME type:", mimeType)
+      
+      // If voice_notes doesn't exist, try messages bucket
+      if (buckets && !buckets.find((b: any) => b.name === 'voice_notes')) {
+        console.warn("[VoiceRecorder] voice_notes bucket not found, trying 'messages' bucket")
+        if (buckets.find((b: any) => b.name === 'messages')) {
+          bucketName = "messages"
+          console.log("[VoiceRecorder] Using 'messages' bucket for voice note")
+        } else {
+          throw new Error("No suitable bucket found. Please create 'voice_notes' or 'messages' bucket in Supabase Storage")
+        }
+      }
 
-    if (error) {
-      throw new Error(`Upload failed: ${error.message}`)
+      const { error, data } = await supabase.storage
+        .from(bucketName)
+        .upload(filename, blob, {
+          contentType: mimeType,
+          cacheControl: "3600",
+          upsert: false,
+        })
+
+      if (error) {
+        console.error("[VoiceRecorder] Upload failed:", error)
+        throw new Error(`Upload failed: ${error.message}`)
+      }
+
+      // Get public URL with proper CORS headers
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(filename)
+
+      if (!urlData || !urlData.publicUrl) {
+        throw new Error("Failed to generate public URL for voice note")
+      }
+
+      console.log("[VoiceRecorder] Voice note uploaded successfully:", urlData.publicUrl)
+      return urlData.publicUrl
+    } catch (err) {
+      console.error("Voice note upload error:", err)
+      throw err
     }
-
-    const { data: urlData } = supabase.storage
-      .from("messages")
-      .getPublicUrl(filename)
-
-    return urlData.publicUrl
   }
 }
 

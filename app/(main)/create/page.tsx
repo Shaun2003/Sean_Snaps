@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { CreatePostForm } from "@/components/create/create-post-form"
 
+export const dynamic = "force-dynamic"
+
 export default async function CreatePage() {
   const supabase = await createClient()
   const {

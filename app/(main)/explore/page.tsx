@@ -5,6 +5,8 @@ import { ExploreContent } from "@/components/explore/explore-content"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default async function ExplorePage() {
   const supabase = await createClient()
   const {

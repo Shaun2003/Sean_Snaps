@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { MessagesLayout } from "@/components/messages/messages-layout"
 
+export const dynamic = "force-dynamic"
+
 export default async function MessagesPage() {
   const supabase = await createClient()
   const {

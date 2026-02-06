@@ -108,10 +108,21 @@ export interface Message {
   content: string | null
   file_url: string | null
   file_type: string | null
+  file_name: string | null
+  duration?: number | null
   is_edited: boolean
   created_at: string
   updated_at: string
   profiles?: Profile
+  
+  // Reply functionality
+  reply_to_id?: string | null
+  replied_message?: Message | null
+  
+  // View once functionality
+  is_view_once?: boolean
+  is_viewed?: boolean
+  viewed_at?: string | null
 }
 
 export interface CallHistory {

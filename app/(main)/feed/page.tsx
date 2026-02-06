@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { FeedContent } from "@/components/feed/feed-content"
 import { StoriesBar } from "@/components/feed/stories-bar"
 
+export const dynamic = "force-dynamic"
+
 export default async function FeedPage() {
   try {
     const supabase = await createClient()

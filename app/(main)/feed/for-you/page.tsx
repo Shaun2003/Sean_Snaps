@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ForYouFeed } from "@/components/feed/for-you-feed"
 
+export const dynamic = "force-dynamic"
+
 export default async function ForYouPage() {
   const supabase = await createClient()
 

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { notFound, redirect } from "next/navigation"
 import { ProfileContent } from "@/components/profile/profile-content"
 
+export const dynamic = "force-dynamic"
+
 interface Props {
   params: Promise<{ username: string }>
 }
