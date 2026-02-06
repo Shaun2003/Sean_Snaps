@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Heart, MessageCircle, UserPlus, AtSign, Bell, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import type { Notification, Profile } from "@/lib/types"
 
 interface NotificationWithActor extends Notification {
@@ -19,6 +20,7 @@ export function NotificationsContent({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("all")
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     fetchNotifications()
@@ -52,7 +54,6 @@ export function NotificationsContent({ userId }: { userId: string }) {
       .limit(100)
 
     if (data && data.length > 0) {
-      // Get unique actor IDs (filter out nulls)
       const actorIds = [...new Set(data.map((n) => n.actor_id).filter((id): id is string => !!id))]
 
       let actorsMap: Record<string, Profile> = {}
@@ -89,6 +90,14 @@ export function NotificationsContent({ userId }: { userId: string }) {
   async function clearAll() {
     await supabase.from("notifications").delete().eq("user_id", userId)
     setNotifications([])
+  }
+
+  const handleNotificationClick = (notification: NotificationWithActor) => {
+    if (notification.reference_type === "post" && notification.reference_id) {
+      router.push(`/feed#post-${notification.reference_id}`)
+    } else if (notification.type === "follow" && notification.actor) {
+      router.push(`/profile/${notification.actor.id}`)
+    }
   }
 
   const filteredNotifications = notifications.filter((n) => {
@@ -180,14 +189,15 @@ export function NotificationsContent({ userId }: { userId: string }) {
               {filteredNotifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors group ${
+                  onClick={() => handleNotificationClick(notification)}
+                  className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer ${
                     !notification.is_read ? "bg-primary/5" : ""
                   }`}
                 >
                   <Link href={notification.actor ? `/profile/${notification.actor.id}` : "#"} className="shrink-0">
                     <Avatar className="size-8 sm:size-10">
                       <AvatarImage src={notification.actor?.avatar_url || undefined} />
-                      <AvatarFallback className="text-xs sm:text-sm bg-gradient-to-br from-primary/60 to-primary">
+                      <AvatarFallback className="text-xs sm:text-sm bg-linear-to-br from-primary/60 to-primary">
                         {notification.actor?.display_name?.[0] || notification.actor?.username?.[0] || "?"}
                       </AvatarFallback>
                     </Avatar>
@@ -200,6 +210,7 @@ export function NotificationsContent({ userId }: { userId: string }) {
                         <Link
                           href={notification.actor ? `/profile/${notification.actor.id}` : "#"}
                           className="font-semibold hover:underline"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {notification.actor?.display_name || notification.actor?.username || "Someone"}
                         </Link>{" "}
@@ -215,7 +226,10 @@ export function NotificationsContent({ userId }: { userId: string }) {
                     variant="ghost"
                     size="icon"
                     className="opacity-0 group-hover:opacity-100 transition-opacity size-7 sm:size-8 shrink-0"
-                    onClick={() => deleteNotification(notification.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteNotification(notification.id)
+                    }}
                   >
                     <Trash2 className="size-3 sm:size-4" />
                   </Button>

@@ -7,7 +7,7 @@ import { VoiceRecorder, formatSeconds } from "@/lib/voice-recorder"
 import { cn } from "@/lib/utils"
 
 interface VoiceNoteRecorderProps {
-  onSend: (audioUrl: string, duration: number) => Promise<void>
+  onSend: (audioBlob: Blob, duration: number, mimeType?: string) => Promise<void>
   onCancel?: () => void
   disabled?: boolean
 }
@@ -116,8 +116,8 @@ export function VoiceNoteRecorder({ onSend, onCancel, disabled }: VoiceNoteRecor
 
     setIsSending(true)
     try {
-      const url = URL.createObjectURL(recordingBlob)
-      await onSend(url, duration)
+      console.log("[VoiceNoteRecorder] Sending voice note blob - Size:", recordingBlob.size, "bytes, Type:", recordingBlob.type)
+      await onSend(recordingBlob, duration, recordingBlob.type)
       setRecordingBlob(null)
       setDuration(0)
       setIsPlayingPreview(false)

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Conversation, Profile, Message } from "@/lib/types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
-import { Users, EyeOff, Trash2 } from "lucide-react"
+import { Users, EyeOff, Trash2, Lock } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface ConversationListProps {
@@ -29,6 +29,7 @@ interface ConversationWithDetails extends Conversation {
 export function ConversationList({ userId, selectedId, onSelect }: ConversationListProps) {
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
   const [showHidden, setShowHidden] = useState(false)
+  const fetchTimeoutRef = useRef<NodeJS.Timeout>()
 
   const fetchConversations = useCallback(async () => {
     const supabase = createClient()
@@ -45,8 +46,18 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
 
     if (!participations) return
 
+    // Deduplicate by conversation_id to prevent duplicates
+    const seenConversationIds = new Set<string>()
+    const uniqueParticipations = participations.filter((p) => {
+      if (seenConversationIds.has(p.conversation_id)) {
+        return false
+      }
+      seenConversationIds.add(p.conversation_id)
+      return true
+    })
+
     const conversationsWithDetails = await Promise.all(
-      participations.map(async (p) => {
+      uniqueParticipations.map(async (p) => {
         const conversation = p.conversations as Conversation | null
 
         // Skip if conversation data didn't load
@@ -102,11 +113,37 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
     const supabase = createClient()
     const channel = supabase
       .channel("conversations-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => fetchConversations())
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => fetchConversations())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
+        // Debounce to prevent multiple rapid fetches
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
+        fetchTimeoutRef.current = setTimeout(() => {
+          fetchConversations()
+        }, 300)
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
+        fetchTimeoutRef.current = setTimeout(() => {
+          fetchConversations()
+        }, 300)
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversation_participants" }, () => {
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
+        fetchTimeoutRef.current = setTimeout(() => {
+          fetchConversations()
+        }, 300)
+      })
       .subscribe()
 
     return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
       supabase.removeChannel(channel)
     }
   }, [fetchConversations])
@@ -157,6 +194,16 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
   const displayedConversations = showHidden ? conversations : conversations.filter((c) => !c.is_hidden)
   const hiddenCount = conversations.filter((c) => c.is_hidden).length
 
+  // Final deduplication layer - ensure no duplicate IDs are rendered
+  const uniqueConversationIds = new Set<string>()
+  const finalDisplayedConversations = displayedConversations.filter((conv) => {
+    if (uniqueConversationIds.has(conv.id)) {
+      return false
+    }
+    uniqueConversationIds.add(conv.id)
+    return true
+  })
+
   return (
     <div className="flex-1 overflow-y-auto">
       {hiddenCount > 0 && (
@@ -167,10 +214,10 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
         </div>
       )}
 
-      {displayedConversations.length === 0 ? (
+      {finalDisplayedConversations.length === 0 ? (
         <div className="p-4 text-center text-muted-foreground">No conversations yet</div>
       ) : (
-        displayedConversations.map((conv) => (
+        finalDisplayedConversations.map((conv) => (
           <div
             key={conv.id}
             className={cn(
@@ -203,18 +250,34 @@ export function ConversationList({ userId, selectedId, onSelect }: ConversationL
                 )}
               </div>
               <div className="flex items-center justify-between mt-0.5">
-                <p
-                  className={cn(
-                    "text-sm truncate",
-                    conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground",
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {conv.lastMessage?.is_view_once && conv.lastMessage?.is_viewed ? (
+                    <>
+                      <Lock className="h-4 w-4 opacity-50 shrink-0" />
+                      <p
+                        className={cn(
+                          "text-sm truncate italic",
+                          conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground",
+                        )}
+                      >
+                        This message has disappeared
+                      </p>
+                    </>
+                  ) : (
+                    <p
+                      className={cn(
+                        "text-sm truncate",
+                        conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground",
+                      )}
+                    >
+                      {conv.lastMessage?.file_url
+                        ? `📎 ${conv.lastMessage.file_type || "File"}`
+                        : conv.lastMessage?.content || "No messages yet"}
+                    </p>
                   )}
-                >
-                  {conv.lastMessage?.file_url
-                    ? `📎 ${conv.lastMessage.file_type || "File"}`
-                    : conv.lastMessage?.content || "No messages yet"}
-                </p>
+                </div>
                 {conv.unreadCount > 0 && (
-                  <Badge className="ml-2 h-5 min-w-[20px] rounded-full px-1.5">{conv.unreadCount}</Badge>
+                  <Badge className="ml-2 h-5 min-w-5 rounded-full px-1.5">{conv.unreadCount}</Badge>
                 )}
               </div>
             </div>

@@ -42,6 +42,7 @@ export function CallDialog({
   const [isVideoOff, setIsVideoOff] = useState(false)
   const [isSpeaker, setIsSpeaker] = useState(true)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // WebRTC refs
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -53,6 +54,7 @@ export function CallDialog({
   // Initialize WebRTC with proper signaling
   const initializeMedia = useCallback(async () => {
     try {
+      setError(null)
       console.log("[CallDialog] Initializing media - isIncomingCall:", isIncomingCall, "incomingCallId:", incomingCallId)
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -148,13 +150,18 @@ export function CallDialog({
       }, 500)
 
       return () => clearInterval(checkRemoteStream)
-    } catch (error) {
+    } catch (error: any) {
       console.error("[WebRTC] Failed to initialize media:", error)
-      // Fallback to demo mode if permissions denied
-      setTimeout(() => setCallState("ringing"), 500)
-      setTimeout(() => setCallState("connected"), 2000)
+      const errorMessage = error?.message || String(error)
+      setError(errorMessage)
+      
+      // End call after showing error
+      setTimeout(() => {
+        setCallState("ended")
+        onOpenChange(false)
+      }, 3000)
     }
-  }, [callType, participant.id, conversationId, isIncomingCall, incomingCallId])
+  }, [callType, participant.id, conversationId, isIncomingCall, incomingCallId, onOpenChange])
 
   useEffect(() => {
     if (!open) {
@@ -166,6 +173,7 @@ export function CallDialog({
       setIsMuted(false)
       setIsVideoOff(false)
       setIsScreenSharing(false)
+      setError(null)
       return
     }
 
@@ -173,7 +181,7 @@ export function CallDialog({
   }, [open, initializeMedia])
 
   useEffect(() => {
-    if (callState !== "connected") return
+    if (callState !== "ringing" && callState !== "connected") return
 
     const interval = setInterval(() => {
       setDuration((d) => d + 1)
@@ -317,6 +325,22 @@ export function CallDialog({
               : `${callType === "video" ? "Video" : "Voice"} call with ${participant.display_name || participant.username}`}
           </DialogDescription>
         </VisuallyHidden>
+
+        {/* Error Display */}
+        {error && (
+          <div className="p-4 bg-red-500/20 border border-red-500/50 text-red-200 text-sm">
+            <p className="font-semibold mb-1">Call Failed</p>
+            <p>{error}</p>
+            <p className="text-xs mt-2 opacity-75">
+              Troubleshooting:
+              <br />• Check camera/microphone permissions in browser settings
+              <br />• Close other apps using camera/microphone
+              <br />• Refresh the page and try again
+              <br />• Try using HTTPS (if in localhost, use https://localhost)
+            </p>
+          </div>
+        )}
+
         <div className="relative min-h-150">
           {/* Video feeds */}
           {callType === "video" && callState === "connected" && (

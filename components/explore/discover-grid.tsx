@@ -37,7 +37,7 @@ export function DiscoverGrid({ userId }: DiscoverGridProps) {
         .limit(30)
 
       if (data) {
-        const enriched = data.map((post) => ({
+        const enriched = data.map((post: any) => ({
           ...post,
           likes_count: post.post_likes?.length || 0,
           comments_count: post.comments?.length || 0,
@@ -80,14 +80,16 @@ export function DiscoverGrid({ userId }: DiscoverGridProps) {
         <div className="text-center py-8 sm:py-12 text-muted-foreground text-sm">No posts to discover yet</div>
       )}
 
-      {selectedPost && (
-        <PostDetailDialog
-          post={selectedPost}
-          currentUserId={userId}
-          open={!!selectedPost}
-          onOpenChange={(open) => !open && setSelectedPost(null)}
-        />
-      )}
+      <PostDetailDialog
+        post={selectedPost as any}
+        currentUserId={userId}
+        open={!!selectedPost}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedPost(null)
+          }
+        }}
+      />
     </>
   )
 }

@@ -43,28 +43,32 @@ export function NewMessageDialog({ open, onOpenChange, userId, onConversationCre
     const supabase = createClient()
 
     try {
-      // Check if conversation already exists
-      const { data: existingParticipations } = await supabase
+      // Check if 1-on-1 conversation already exists with this user
+      const { data: existingConvs } = await supabase
         .from("conversation_participants")
         .select("conversation_id, conversations(id, is_group)")
         .eq("user_id", userId)
 
-      if (existingParticipations && existingParticipations.length > 0) {
-        for (const p of existingParticipations) {
-          const { data: otherParticipants } = await supabase
+      if (existingConvs && existingConvs.length > 0) {
+        for (const conv of existingConvs) {
+          const conversation = conv.conversations as any
+          
+          // Skip group conversations
+          if (conversation?.is_group) continue
+          
+          const { data: participants } = await supabase
             .from("conversation_participants")
             .select("user_id")
-            .eq("conversation_id", p.conversation_id)
-            .neq("user_id", userId)
+            .eq("conversation_id", conv.conversation_id)
 
-          // Check if this is a 1-on-1 conversation with the selected user
+          // Check if this is a 1-on-1 conversation with exactly these 2 users
+          const participantIds = participants?.map(p => p.user_id) || []
           if (
-            otherParticipants &&
-            otherParticipants.length === 1 &&
-            otherParticipants[0]?.user_id === selectedUserId &&
-            !(p.conversations as any)?.is_group
+            participantIds.length === 2 &&
+            participantIds.includes(userId) &&
+            participantIds.includes(selectedUserId)
           ) {
-            onConversationCreated(p.conversation_id)
+            onConversationCreated(conv.conversation_id)
             return
           }
         }

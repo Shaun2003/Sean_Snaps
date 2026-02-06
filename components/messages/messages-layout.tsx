@@ -33,7 +33,7 @@ export function MessagesLayout({ userId }: MessagesLayoutProps) {
   const [showIncomingCallDialog, setShowIncomingCallDialog] = useState(false)
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] md:h-[calc(100dvh-0rem)] w-full bg-background">
+    <div className="flex h-[calc(100dvh-4rem)] md:h-[calc(100dvh-0rem)] w-full bg-background overflow-hidden">
       {/* Conversations Sidebar - Responsive */}
       <div
         className={`w-full md:w-72 lg:w-80 border-r border-border/50 flex flex-col bg-card transition-all duration-300 ${selectedConversationId ? "hidden md:flex" : "flex"}`}
@@ -80,7 +80,7 @@ export function MessagesLayout({ userId }: MessagesLayoutProps) {
       </div>
 
       {/* Chat Area - Full width on mobile */}
-      <div className={`flex-1 flex flex-col bg-background transition-all duration-300 ${selectedConversationId ? "flex" : "hidden md:flex"} w-full md:w-auto`}>
+      <div className={`flex-1 flex flex-col bg-background transition-all duration-300 overflow-hidden relative ${selectedConversationId ? "flex" : "hidden md:flex"} w-full md:w-auto`}>
         {selectedConversationId ? (
           <ChatView
             conversationId={selectedConversationId}

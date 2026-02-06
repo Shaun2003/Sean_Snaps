@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface VideoPlayerProps {
-  src: string
+  src: string | null | undefined
   poster?: string
   className?: string
   autoPlay?: boolean
@@ -20,6 +20,10 @@ export function VideoPlayer({ src, poster, className, autoPlay = false, muted = 
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [showControls, setShowControls] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Validate video URL
+  const isValidUrl = src && typeof src === 'string' && (src.startsWith('http') || src.startsWith('blob:'))
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -69,6 +73,45 @@ export function VideoPlayer({ src, poster, className, autoPlay = false, muted = 
     }
   }
 
+  const handleError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget
+    const errorCode = video.error?.code
+    let errorMsg = "Unable to load video"
+    
+    switch (errorCode) {
+      case 1:
+        errorMsg = "Video loading aborted"
+        break
+      case 2:
+        errorMsg = "Network error"
+        break
+      case 3:
+        errorMsg = "Video decoding failed"
+        break
+      case 4:
+        errorMsg = "Video format not supported"
+        break
+    }
+    
+    setError(errorMsg)
+  }
+
+  if (!isValidUrl) {
+    return (
+      <div className={cn("relative bg-black rounded-lg overflow-hidden flex items-center justify-center min-h-75", className)}>
+        <p className="text-white text-sm">Invalid video source</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className={cn("relative bg-black rounded-lg overflow-hidden flex items-center justify-center min-h-75", className)}>
+        <p className="text-white text-sm">{error}</p>
+      </div>
+    )
+  }
+
   return (
     <div
       className={cn("relative bg-black rounded-lg overflow-hidden group", className)}
@@ -83,7 +126,9 @@ export function VideoPlayer({ src, poster, className, autoPlay = false, muted = 
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onClick={togglePlay}
+        onError={handleError}
         muted={isMuted}
+        crossOrigin="anonymous"
       />
 
       {/* Play button overlay */}

@@ -229,10 +229,14 @@ export function SearchSection({ userId }: SearchSectionProps) {
 
       {selectedPost && (
         <PostDetailDialog
-          post={selectedPost}
+          post={selectedPost as any}
           currentUserId={userId}
           open={!!selectedPost}
-          onOpenChange={(open) => !open && setSelectedPost(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedPost(null)
+            }
+          }}
         />
       )}
     </div>

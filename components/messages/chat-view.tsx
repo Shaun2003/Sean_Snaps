@@ -20,6 +20,8 @@ import {
   FileText,
   Users,
   Mic,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -31,6 +33,8 @@ import { useToast } from "@/hooks/use-toast"
 import { CallDialog } from "./call-dialog"
 import { MessageBubble } from "./message-bubble"
 import { VoiceNoteRecorder } from "./voice-note-recorder"
+import { ReplyPreview } from "./reply-preview"
+import { GroupSettingsDialog } from "./group-settings-dialog"
 import Link from "next/link"
 
 interface ChatViewProps {
@@ -56,11 +60,14 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showStickers, setShowStickers] = useState(false)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [isViewOnce, setIsViewOnce] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [showCallDialog, setShowCallDialog] = useState(false)
   const [callType, setCallType] = useState<"voice" | "video">("voice")
   const [isRecordingVoice, setIsRecordingVoice] = useState(false)
   const [missedCalls, setMissedCalls] = useState<any[]>([])
+  const [showGroupSettings, setShowGroupSettings] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -83,7 +90,7 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
 
     const { data } = await supabase
       .from("messages")
-      .select("*, profiles (*)")
+      .select("*, profiles (*), replied_message:reply_to_id(*, profiles(*))")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
@@ -110,7 +117,7 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
       .neq("user_id", userId)
 
     if (parts) {
-      setParticipants(parts.map((p) => p.profiles as Profile))
+      setParticipants(parts.map((p: any) => p.profiles as Profile))
     }
 
     // Fetch missed calls for this conversation
@@ -123,7 +130,7 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
       .order("created_at", { ascending: false })
 
     if (calls) {
-      setMissedCalls(calls.filter((call) => !call.started_at || new Date(call.started_at).getTime() === new Date(call.created_at).getTime()))
+      setMissedCalls(calls.filter((call: any) => !call.started_at || new Date(call.started_at).getTime() === new Date(call.created_at).getTime()))
     }
   }, [conversationId, userId])
 
@@ -172,12 +179,16 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         conversation_id: conversationId,
         user_id: userId,
         content: newMessage.trim(),
+        reply_to_id: replyingTo?.id,
+        is_view_once: isViewOnce,
       })
 
       await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId)
     }
 
     setNewMessage("")
+    setReplyingTo(null)
+    setIsViewOnce(false)
     fetchMessages()
   }
 
@@ -209,11 +220,14 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         conversation_id: conversationId,
         user_id: userId,
         file_url: publicUrl,
-        file_type: fileType,
+        file_type: file.type || fileType,
+        file_name: file.name,
+        is_view_once: isViewOnce,
       })
 
       await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId)
 
+      setIsViewOnce(false)
       fetchMessages()
     } catch (error) {
       toast({
@@ -244,17 +258,83 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
   }
 
   const handleDeleteMessage = async (messageId: string) => {
-    if (!window.confirm("Delete this message?")) return
-    
     const supabase = createClient()
-    await supabase.from("messages").delete().eq("id", messageId)
     
-    toast({
-      title: "Message deleted",
-      description: "Your message has been removed",
-    })
+    try {
+      const { error } = await supabase.from("messages").delete().eq("id", messageId)
+      
+      if (error) throw error
+      
+      toast({
+        title: "Message deleted",
+        description: "Your message has been removed",
+      })
+      
+      fetchMessages()
+    } catch (error) {
+      console.error("Error deleting message:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete message",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    const supabase = createClient()
     
-    fetchMessages()
+    try {
+      // Get current message reactions
+      const { data: msg, error: fetchError } = await supabase
+        .from("messages")
+        .select("reactions")
+        .eq("id", messageId)
+        .single()
+
+      if (fetchError) {
+        console.error("Error fetching message reactions - Details:", fetchError)
+        throw new Error(`Failed to fetch message: ${fetchError.message}`)
+      }
+
+      let reactions = msg?.reactions || {}
+      
+      // Initialize emoji array if it doesn't exist
+      if (!reactions[emoji]) {
+        reactions[emoji] = []
+      }
+      
+      // Add or remove user reaction
+      const userIdStr = userId
+      if (reactions[emoji].includes(userIdStr)) {
+        reactions[emoji] = reactions[emoji].filter((id: string) => id !== userIdStr)
+        if (reactions[emoji].length === 0) {
+          delete reactions[emoji]
+        }
+      } else {
+        reactions[emoji].push(userIdStr)
+      }
+      
+      // Update message
+      const { error: updateError } = await supabase
+        .from("messages")
+        .update({ reactions })
+        .eq("id", messageId)
+
+      if (updateError) {
+        console.error("Error updating reactions - Details:", updateError)
+        throw new Error(`Failed to update reactions: ${updateError.message}`)
+      }
+      
+      fetchMessages()
+    } catch (error) {
+      console.error("Error adding reaction:", error instanceof Error ? error.message : JSON.stringify(error))
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add reaction",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleCall = (type: "voice" | "video") => {
@@ -262,60 +342,139 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
     setShowCallDialog(true)
   }
 
-  const handleSendVoiceNote = async (audioUrl: string, duration: number) => {
+  const handleSendVoiceNote = async (audioBlob: Blob, duration: number, mimeType?: string) => {
     const supabase = createClient()
     
     try {
-      // Convert blob URL to blob if it's a blob URL
-      const response = await fetch(audioUrl)
-      const blob = await response.blob()
+      let actualMimeType = mimeType || audioBlob.type || "audio/webm"
       
-      console.log("[ChatView] Voice note blob size:", blob.size, "Type:", blob.type)
+      // Strip codec info from MIME type (e.g., "audio/webm;codecs=opus" -> "audio/webm")
+      actualMimeType = actualMimeType.split(";")[0].trim()
       
-      // Upload to Supabase storage
-      const fileName = `${userId}/${conversationId}/${Date.now()}.webm`
-      const { data: uploadData, error: uploadError } = await supabase.storage.from("voice_notes").upload(fileName, blob)
+      console.log("[ChatView] Received voice note blob - Size:", audioBlob.size, "bytes - Type:", actualMimeType)
+      
+      // Determine file extension based on MIME type
+      let extension = "webm"
+      if (actualMimeType.includes("mp4")) extension = "mp4"
+      else if (actualMimeType.includes("mpeg")) extension = "mp3"
+      else if (actualMimeType.includes("wav")) extension = "wav"
+      else if (actualMimeType.includes("ogg")) extension = "ogg"
+      
+      const fileName = `${userId}/${conversationId}/${Date.now()}.${extension}`
+      
+      // Try buckets in order: voice_notes first, then messages
+      const bucketsToTry = ["voice_notes", "messages"]
+      let uploadError: any = null
+      
+      for (const bucketName of bucketsToTry) {
+        try {
+          console.log(`[ChatView] Attempting to upload to '${bucketName}' bucket with MIME type: ${actualMimeType}`)
+          
+          // Try multiple upload strategies
+          let uploadResult = null
+          
+          // Strategy 1: Upload with proper MIME type
+          uploadResult = await supabase.storage
+            .from(bucketName)
+            .upload(fileName, audioBlob, {
+              contentType: actualMimeType,
+              cacheControl: "3600",
+            })
 
-      if (uploadError) {
-        console.error("[ChatView] Upload error:", uploadError)
-        throw uploadError
+          // Strategy 2: If MIME type rejected, try without contentType
+          if (uploadResult.error?.message?.includes("mime type") || uploadResult.error?.message?.includes("not supported")) {
+            console.warn(`[ChatView] MIME type '${actualMimeType}' not supported, retrying without contentType...`)
+            uploadResult = await supabase.storage
+              .from(bucketName)
+              .upload(fileName, audioBlob, {
+                cacheControl: "3600",
+              })
+          }
+
+          // Strategy 3: If still fails, upload as application/octet-stream (raw binary)
+          if (uploadResult.error?.message?.includes("mime type") || uploadResult.error?.message?.includes("not supported")) {
+            console.warn(`[ChatView] Still failing, trying as raw binary (application/octet-stream)...`)
+            uploadResult = await supabase.storage
+              .from(bucketName)
+              .upload(fileName, audioBlob, {
+                contentType: "application/octet-stream",
+                cacheControl: "3600",
+              })
+          }
+
+          const { data: uploadData, error: uploadErr } = uploadResult
+
+          if (uploadErr) {
+            console.warn(`[ChatView] Upload to '${bucketName}' failed:`, uploadErr.message)
+            uploadError = uploadErr
+            continue // Try next bucket
+          }
+
+          // Success! Get public URL
+          console.log(`[ChatView] Upload successful to '${bucketName}' bucket, path:`, uploadData?.path)
+          const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName)
+          
+          console.log("[ChatView] Public URL from storage:", data?.publicUrl)
+
+          if (!data?.publicUrl) {
+            throw new Error("Failed to generate public URL for voice note")
+          }
+
+          // Send message with voice note URL
+          const { data: messageData, error: messageError } = await supabase
+            .from("messages")
+            .insert([
+              {
+                conversation_id: conversationId,
+                user_id: userId,
+                content: `[Voice Note - ${duration}s]`,
+                file_url: data.publicUrl,
+                file_type: "audio/webm",
+              },
+            ])
+            .select()
+            .single()
+
+          if (messageError) {
+            console.error("[ChatView] Error saving message - Full error:", JSON.stringify(messageError, null, 2))
+            console.error("[ChatView] Error message:", messageError.message)
+            console.error("[ChatView] Error code:", messageError.code)
+            console.error("[ChatView] Error hint:", messageError.hint)
+            throw new Error(`Failed to save message: ${messageError.message || JSON.stringify(messageError)}`)
+          }
+
+          console.log("[ChatView] Message saved successfully")
+          fetchMessages()
+          return // Exit successfully
+        } catch (err: any) {
+          console.warn(`[ChatView] Error with '${bucketName}' bucket:`, err.message)
+          uploadError = err
+          // Continue to next bucket
+        }
       }
 
-      console.log("[ChatView] Upload successful:", uploadData)
-
-      // Get public URL
-      const { data } = supabase.storage.from("voice_notes").getPublicUrl(fileName)
-      
-      console.log("[ChatView] Public URL data:", data)
-      
-      if (!data?.publicUrl) {
-        throw new Error("Failed to get public URL")
+      // If we got here, all buckets failed
+      if (uploadError?.message?.includes("not found")) {
+        throw new Error("Storage buckets not found. Please create 'voice_notes' bucket in Supabase Storage")
       }
-
-      console.log("[ChatView] Saving message with URL:", data.publicUrl)
-
-      // Save message with file URL
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        user_id: userId,
-        content: `Voice note (${Math.floor(duration)}s)`,
-        file_url: data.publicUrl,
-        file_type: "audio/webm",
-      })
-
-      await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId)
-
-      setIsRecordingVoice(false)
-      fetchMessages()
-      toast({
-        title: "Voice note sent",
-        description: "Your voice message has been sent",
-      })
+      throw uploadError || new Error("No suitable bucket found. Please create 'voice_notes' or 'messages' bucket in Supabase Storage")
     } catch (error) {
-      console.error("[ChatView] Error sending voice note:", error)
+      console.error("[ChatView] Error sending voice note - Full error:", JSON.stringify(error, null, 2))
+      console.error("[ChatView] Error object:", error)
+      
+      let errorMsg = "Failed to send voice note"
+      if (error instanceof Error) {
+        errorMsg = error.message
+      } else if (error && typeof error === "object") {
+        errorMsg = (error as any).message || JSON.stringify(error)
+      } else {
+        errorMsg = String(error)
+      }
+      
+      console.error("[ChatView] Final error message:", errorMsg)
       toast({
-        title: "Error",
-        description: "Failed to send voice note",
+        title: "Error sending voice note",
+        description: errorMsg || "Unknown error occurred",
         variant: "destructive",
       })
     }
@@ -344,8 +503,8 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
 
   return (
     <div className="flex flex-col h-full w-full bg-background">
-      {/* Header - Facebook Messenger Style */}
-      <div className="flex items-center gap-3 p-4 sm:p-5 border-b border-border/50 bg-card shrink-0">
+      {/* Header - Fixed on mobile, sticky on desktop */}
+      <div className="fixed md:static top-0 left-0 right-0 md:relative flex items-center gap-3 p-4 sm:p-5 border-b border-border/50 bg-card shrink-0 z-20 md:z-10">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -356,9 +515,13 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         </Button>
 
         {conversation?.is_group ? (
-          <div className="h-12 w-12 rounded-full bg-linear-to-br from-primary to-purple-600 flex items-center justify-center shrink-0">
+          <button
+            onClick={() => setShowGroupSettings(true)}
+            className="h-12 w-12 rounded-full bg-linear-to-br from-primary to-purple-600 flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer"
+            title="Group settings"
+          >
             <Users className="h-5 w-5 text-white" />
-          </div>
+          </button>
         ) : (
           <Link href={`/profile/${participants[0]?.id}`}>
             <Avatar className="h-12 w-12 ring-2 ring-background shrink-0">
@@ -401,8 +564,8 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         </div>
       </div>
 
-      {/* Messages - Better spacing */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 bg-linear-to-br from-background via-background to-muted/10">
+      {/* Messages - Better spacing with padding for header and input on mobile */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 space-y-2 sm:space-y-3 md:space-y-4 bg-linear-to-br from-background via-background to-muted/10 pt-20 md:pt-0 pb-0 md:pb-0">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground">
             {missedCalls.length > 0 ? (
@@ -434,6 +597,11 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
                   setNewMessage(editMsg.content || "")
                 }}
                 onDelete={handleDeleteMessage}
+                onReact={handleAddReaction}
+                onReply={(replyMsg) => {
+                  setReplyingTo(replyMsg)
+                  textareaRef.current?.focus()
+                }}
               />
             )
           })
@@ -441,8 +609,8 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Better alignment */}
-      <div className="p-4 sm:p-5 border-t border-border/50 bg-card shrink-0 space-y-3">
+      {/* Input Area - Fixed directly above mobile navbar, normal on desktop */}
+      <div className="fixed md:relative bottom-14 left-0 right-0 md:bottom-auto p-3 sm:p-4 md:p-5 border-t border-border/50 bg-card shrink-0 space-y-2 sm:space-y-3 z-30 md:z-auto md:static">
         {editingMessage && (
           <div className="flex items-center justify-between bg-muted/50 p-2.5 sm:p-3 rounded-lg border border-border/30">
             <span className="text-sm text-muted-foreground font-medium">Editing message...</span>
@@ -460,7 +628,14 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
           </div>
         )}
 
-        <div className="flex items-end gap-2 sm:gap-3">
+        {replyingTo && (
+          <ReplyPreview 
+            message={replyingTo} 
+            onClearReply={() => setReplyingTo(null)} 
+          />
+        )}
+
+        <div className="flex items-end gap-1.5 sm:gap-2 md:gap-3 flex-wrap sm:flex-nowrap">
           <input
             ref={fileInputRef}
             type="file"
@@ -500,6 +675,19 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Button
+            variant={isViewOnce ? "default" : "ghost"}
+            size="icon"
+            onClick={() => setIsViewOnce(!isViewOnce)}
+            className={cn(
+              "shrink-0 h-10 w-10",
+              isViewOnce ? "bg-blue-500 hover:bg-blue-600 text-white" : "hover:bg-muted"
+            )}
+            title={isViewOnce ? "View once enabled" : "View once disabled"}
+          >
+            {isViewOnce ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </Button>
 
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
   <PopoverTrigger asChild suppressHydrationWarning>
@@ -586,6 +774,17 @@ export function ChatView({ conversationId, userId, onBack }: ChatViewProps) {
           onEndCall={handleEndCall}
           currentUserId={userId}
           conversationId={conversationId}
+        />
+      )}
+
+      {conversation?.is_group && (
+        <GroupSettingsDialog
+          open={showGroupSettings}
+          onOpenChange={setShowGroupSettings}
+          conversationId={conversationId}
+          groupName={conversation.name || "Group"}
+          currentUserId={userId}
+          isAdmin={true}
         />
       )}
     </div>
